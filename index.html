@@ -215,6 +215,14 @@
           </div>
         </div>
       </div>
+
+      <!-- TAB RIWAYAT -->
+      <div id="tabRiwayat" class="hidden bg-white border border-blue-100 p-6 rounded-2xl shadow-md space-y-4">
+        <h3 class="text-base font-bold text-blue-600 border-b border-slate-100 pb-3"><i class="fa-solid fa-clock-rotate-left"></i> Riwayat Absen Saya</h3>
+        <div id="listRiwayatContainer" class="space-y-3 text-sm">
+          <p class="text-slate-400 text-center py-4 font-medium">Memuat riwayat...</p>
+        </div>
+      </div>
     </div>
 
     <!-- DASBOR DPL -->
@@ -427,7 +435,7 @@
 
   <!-- FIXED BOTTOM NAVIGATION (TABS MENU BEKU DIBAWAH) -->
   <nav id="bottomNav" class="hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg z-40 max-w-xl mx-auto">
-    <div class="grid grid-cols-4 gap-1 p-2 text-center text-xs font-bold">
+    <div class="grid grid-cols-5 gap-1 p-2 text-center text-xs font-bold">
       <button id="tabBtnPresensi" onclick="switchTab('presensi')" class="py-2.5 rounded-xl bg-blue-600 text-white transition shadow-sm flex flex-col items-center gap-0.5">
         <i class="fa-solid fa-location-dot text-sm"></i><span>Presensi</span>
       </button>
@@ -439,6 +447,9 @@
       </button>
       <button id="tabBtnPiket" onclick="switchTab('piket')" class="py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 transition flex flex-col items-center gap-0.5">
         <i class="fa-solid fa-calendar-days text-sm"></i><span>Piket</span>
+      </button>
+      <button id="tabBtnRiwayat" onclick="switchTab('riwayat')" class="py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 transition flex flex-col items-center gap-0.5">
+        <i class="fa-solid fa-clock-rotate-left text-sm"></i><span>Riwayat</span>
       </button>
     </div>
   </nav>
@@ -541,6 +552,7 @@
         loadProkerData();
         loadPiketData();
         checkPresensiHariIni();
+        loadRiwayatPresensi();
       }
     }
 
@@ -557,7 +569,7 @@
     }
 
     function switchTab(tabName) {
-      ['presensi', 'jurnal', 'proker', 'piket'].forEach(t => {
+      ['presensi', 'jurnal', 'proker', 'piket', 'riwayat'].forEach(t => {
         const cap = t.charAt(0).toUpperCase() + t.slice(1);
         document.getElementById(`tab${cap}`).classList.add("hidden");
         document.getElementById(`tabBtn${cap}`).className = "py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 transition flex flex-col items-center gap-0.5 font-bold";
@@ -566,6 +578,10 @@
       const activeCap = tabName.charAt(0).toUpperCase() + tabName.slice(1);
       document.getElementById(`tab${activeCap}`).classList.remove("hidden");
       document.getElementById(`tabBtn${activeCap}`).className = "py-2.5 rounded-xl bg-blue-600 text-white transition flex flex-col items-center gap-0.5 font-bold shadow-sm";
+
+      if (tabName === 'riwayat') {
+        loadRiwayatPresensi();
+      }
     }
 
     function switchDplSection(section) {
@@ -624,10 +640,10 @@
         boxKet.classList.remove("hidden");
         inputKet.setAttribute("required", "true");
         labelKet.textContent = val === "Izin" ? "Alasan Izin (Wajib)" : "Keterangan Sakit (Wajib)";
-      } else if (currentDistance && currentDistance > MAX_RADIUS_KM) {
+      } else if (currentDistance !== null && (currentDistance * 1000) > MAX_RADIUS_M) {
         boxKet.classList.remove("hidden");
         inputKet.setAttribute("required", "true");
-        labelKet.textContent = "Alasan Berada di Luar Radius Posko (> 2km)";
+        labelKet.textContent = `Alasan Berada di Luar Radius Posko (> ${MAX_RADIUS_M}m)`;
       } else {
         boxKet.classList.add("hidden");
         inputKet.removeAttribute("required");
@@ -655,10 +671,14 @@
             userLat = pos.coords.latitude;
             userLng = pos.coords.longitude;
             currentDistance = calculateDistance(userLat, userLng, POSKO_LAT, POSKO_LNG);
-            
-            distText.textContent = `${currentDistance.toFixed(2)} km dari posko`;
+            const distanceMeter = currentDistance * 1000;
+
+            distText.textContent = distanceMeter < 1000
+              ? `${Math.round(distanceMeter)} m dari posko`
+              : `${currentDistance.toFixed(2)} km dari posko`;
+
             const tipe = document.getElementById("tipePresensi").value;
-            if (currentDistance <= MAX_RADIUS_KM) {
+            if (distanceMeter <= MAX_RADIUS_M) {
               distText.className = "font-bold text-blue-600";
               if (tipe !== "Izin" && tipe !== "Sakit") {
                 document.getElementById("boxKeteranganKhusus").classList.add("hidden");
@@ -668,7 +688,7 @@
               distText.className = "font-bold text-amber-600";
               document.getElementById("boxKeteranganKhusus").classList.remove("hidden");
               document.getElementById("keteranganKhususInput").setAttribute("required", "true");
-              document.getElementById("labelKeteranganKhusus").textContent = "Alasan Berada di Luar Radius Posko (> 2km)";
+              document.getElementById("labelKeteranganKhusus").textContent = `Alasan Berada di Luar Radius Posko (> ${MAX_RADIUS_M}m)`;
             }
           },
           (err) => {
@@ -831,6 +851,7 @@
           document.getElementById("uploadPlaceholder").classList.remove("hidden");
           base64Image = "";
           checkPresensiHariIni();
+          loadRiwayatPresensi();
         } else {
           showAlert(result.message || "Gagal menyimpan presensi.", "error");
         }
@@ -964,6 +985,36 @@
           });
         }
       } catch (e) {}
+    }
+
+    async function loadRiwayatPresensi() {
+      if (!currentUser) return;
+      const container = document.getElementById("listRiwayatContainer");
+      if (!container) return;
+      container.innerHTML = `<p class="text-slate-400 text-center py-4 font-medium"><i class="fa-solid fa-spinner fa-spin"></i> Memuat riwayat...</p>`;
+
+      try {
+        const res = await fetch(`${API_URL}?action=getRiwayatPresensi&nama=${encodeURIComponent(currentUser.nama)}`);
+        const result = await res.json();
+
+        if (result.status === "success" && result.riwayat.length > 0) {
+          container.innerHTML = result.riwayat.map(r => `
+            <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 shadow-sm">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-800">${r.tanggal}</span>
+                <span class="text-xs text-slate-500">${r.waktu}</span>
+              </div>
+              <p class="text-sm font-semibold text-blue-600 mt-1">${r.status}</p>
+              ${r.alasan && r.alasan !== '-' ? `<p class="text-xs text-slate-500 mt-1">Keterangan: ${r.alasan}</p>` : ''}
+              ${r.foto && r.foto !== '-' ? `<a href="${r.foto}" target="_blank" class="text-xs text-blue-600 font-bold underline mt-1 inline-block">Lihat Foto</a>` : ''}
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = `<p class="text-slate-400 text-center py-4 font-medium">Belum ada riwayat presensi.</p>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<p class="text-rose-600 text-center py-4 font-bold">Gagal memuat riwayat.</p>`;
+      }
     }
 
     async function loadDaftarMahasiswa() {
